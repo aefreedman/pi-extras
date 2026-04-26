@@ -1,0 +1,13 @@
+{
+  "name": "@aefree/pi-extras",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Small utility prompts and skills for Pi.",
+  "license": "MIT",
+  "type": "module",
+  "keywords": ["pi-package"],
+  "pi": {
+    "prompts": ["./prompts"],
+    "skills": ["./skills"]
+  }
+}
