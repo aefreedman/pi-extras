@@ -37,4 +37,3 @@ CRITICAL: Use relative path references and load files only when needed for the c
 3. Splitting guidance -> ../streamlining-skills/references/ref-splitting.md
 4. Section normalization -> ../streamlining-skills/references/section-normalization.md
 5. Attribution guidance -> ../streamlining-skills/references/attribution.md
-6. Artifact path contract -> ../_shared/references/artifact-path-contract.md

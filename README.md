@@ -21,6 +21,12 @@ Project-local install:
 pi install -l <path-to-pi-extras>
 ```
 
+Git install:
+
+```bash
+pi install git:git@github.com:aefreedman/pi-extras.git
+```
+
 ## License
 
 MIT. See `LICENSE`.

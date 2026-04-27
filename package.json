@@ -5,9 +5,26 @@
   "description": "Small utility prompts and skills for Pi.",
   "license": "MIT",
   "type": "module",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "pi": {
-    "prompts": ["./prompts"],
-    "skills": ["./skills"]
-  }
+    "prompts": [
+      "./prompts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "test": "npx --yes tsx tests/package-validation.test.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/aefreedman/pi-extras.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aefreedman/pi-extras/issues"
+  },
+  "homepage": "https://github.com/aefreedman/pi-extras#readme"
 }

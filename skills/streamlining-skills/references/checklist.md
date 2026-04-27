@@ -26,4 +26,4 @@
 - Ensure references are reachable and paths are correct.
 - Confirm SKILL.md matches directory name.
 - Scan for remaining duplication.
-- Verify artifact-path invariants from ../../_shared/references/artifact-path-contract.md are preserved.
+- Verify any package-specific artifact path invariants are preserved.
