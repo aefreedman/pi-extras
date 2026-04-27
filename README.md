@@ -9,7 +9,13 @@ Small utility prompts and skills for Pi.
 
 ## Install
 
-Local path install:
+From GitHub:
+
+```bash
+pi install git:git@github.com:aefreedman/pi-extras.git
+```
+
+Local development install:
 
 ```bash
 pi install <path-to-pi-extras>
@@ -21,11 +27,9 @@ Project-local install:
 pi install -l <path-to-pi-extras>
 ```
 
-Git install:
+## Notes
 
-```bash
-pi install git:git@github.com:aefreedman/pi-extras.git
-```
+This package is intentionally small. Utility prompts and maintenance skills can live here when they do not justify a dedicated package.
 
 ## License
 
