@@ -34,6 +34,8 @@ assert(extensionText.includes("Session files:"), "Expected aggregate session out
 assert(extensionText.includes("filterMode") && extensionText.includes("package-workflow"), "Expected session analysis filtering controls.");
 assert(extensionText.includes("Failure signatures") && extensionText.includes("Candidate package/workflow themes"), "Expected session analysis triage sections.");
 assert(extensionText.includes("knownFixed") && extensionText.includes("likely_already_fixed"), "Expected known-fixed theme tagging.");
+assert(extensionText.includes("reportMode") && extensionText.includes("limitSessions"), "Expected compact session-analysis report controls.");
+assert(extensionText.includes("themeIsExcluded") && extensionText.includes("failureSignatures"), "Expected candidate exclusion and full-run failure signature counting.");
 assert(!extensionText.includes('"tool", "skill"'), "Ambiguous word 'tool' should not by itself classify corrections as package-workflow.");
 assert(existsSync(new URL("prompts/continue.md", root)), "Expected /continue prompt.");
 assert(existsSync(new URL("prompts/analyze-session.md", root)), "Expected /analyze-session prompt.");
@@ -43,6 +45,8 @@ assert(existsSync(new URL("skills/streamlining-skills/SKILL.md", root)), "Expect
 const analyzeSessionText = readFileSync(new URL("prompts/analyze-session.md", root), "utf8");
 assert(analyzeSessionText.includes("tool-call counts"), "Expected analyze-session prompt to collect tool-call counts.");
 assert(analyzeSessionText.includes("improving existing packages"), "Expected analyze-session prompt to prioritize existing-package improvements.");
+assert(analyzeSessionText.includes('reportMode="compact"'), "Expected analyze-session prompt to recommend compact large-scan reports.");
+assert(readFileSync(new URL("README.md", root), "utf8").includes("package.json"), "Expected npm working-directory guardrail guidance.");
 
 const closeoutCardText = readFileSync(new URL("prompts/closeout-card.md", root), "utf8");
 assert(closeoutCardText.includes("codecks_card_list_resolvables"), "Expected closeout-card prompt to avoid duplicate review threads.");

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows semantic versioning for public package releases.
 
+## [0.3.4] - 2026-06-28
+
+### Changed
+
+- Made `pi_analyze_session` aggregate reports more usable for large historical scans with compact/candidates report modes, displayed-session limits, accurate full-run failure-signature counts, and candidate exclusion filtering.
+- Added package-maintenance guidance to confirm the target package directory contains `package.json` before running `npm` commands from coordination roots.
+
 ## [0.3.3] - 2026-06-28
 
 ### Changed

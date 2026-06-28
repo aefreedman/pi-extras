@@ -34,7 +34,9 @@ pi install -l <path-to-pi-extras>
 
 This package is intentionally small. Utility prompts, lightweight tools, and maintenance skills can live here when they do not justify a dedicated package.
 
-`pi_analyze_session` accepts a session id/path, a directory, or `session="all"` with `projectFolder` and `days` for aggregate reviews. It also supports `since`/`until`, `includeSessionIds`/`excludeSessionIds`, `filterMode` (`all`, `package-workflow`, or `project-specific`), `knownFixed`, and `excludeThemes` to reduce already-fixed or project-specific noise during package-improvement reviews.
+`pi_analyze_session` accepts a session id/path, a directory, or `session="all"` with `projectFolder` and `days` for aggregate reviews. It also supports `since`/`until`, `includeSessionIds`/`excludeSessionIds`, `filterMode` (`all`, `package-workflow`, or `project-specific`), `knownFixed`, and `excludeThemes` to reduce already-fixed or project-specific noise during package-improvement reviews. Use `reportMode="compact"` for large historical scans, `reportMode="candidates"` when you only need triage themes, and `limitSessions` to cap displayed session rows without changing aggregate counts.
+
+When maintaining Pi package repos from a coordination root, confirm the working directory contains the target package's `package.json` before running `npm install`, `npm test`, `npm version`, or similar package commands. Coordination roots may intentionally contain child package repositories but no root `package.json`.
 
 ## License
 

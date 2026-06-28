@@ -27,3 +27,4 @@
 - Confirm SKILL.md matches directory name.
 - Scan for remaining duplication.
 - Verify any package-specific artifact path invariants are preserved.
+- Before running `npm` commands, confirm the current working directory contains the target package's `package.json`; coordination roots may intentionally have no root package manifest.
