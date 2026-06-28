@@ -43,6 +43,7 @@ assert(analyzeSessionText.includes("improving existing packages"), "Expected ana
 const closeoutCardText = readFileSync(new URL("prompts/closeout-card.md", root), "utf8");
 assert(closeoutCardText.includes("codecks_card_list_resolvables"), "Expected closeout-card prompt to avoid duplicate review threads.");
 assert(closeoutCardText.includes("plastic_mergeToBranch"), "Expected closeout-card prompt to prefer Plastic merge helper.");
+assert(closeoutCardText.includes("Plastic parent branch") && closeoutCardText.includes("Do not assume `/dev`"), "Expected closeout-card prompt to default to the Plastic parent branch.");
 
 const skillText = readFileSync(new URL("skills/streamlining-skills/SKILL.md", root), "utf8");
 assert(skillText.includes("name: streamlining-skills"), "Expected skill frontmatter name.");
