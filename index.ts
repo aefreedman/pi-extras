@@ -10,8 +10,15 @@ const DEFAULT_DAYS = 7;
 type SessionAnalysisParams = {
   session?: string;
   days?: number;
+  since?: string;
+  until?: string;
   focus?: string;
   projectFolder?: string;
+  includeSessionIds?: string[];
+  excludeSessionIds?: string[];
+  filterMode?: "all" | "package-workflow" | "project-specific";
+  knownFixed?: string;
+  excludeThemes?: string[];
   limitFailures?: number;
   limitCorrections?: number;
 };
@@ -32,8 +39,8 @@ type SessionSummary = {
   skills: Record<string, number>;
   references: Record<string, number>;
   prompts: Record<string, number>;
-  notableFailures: Array<{ tool: string; snippet: string }>;
-  userCorrections: string[];
+  notableFailures: Array<{ tool: string; snippet: string; signature: string }>;
+  userCorrections: Array<{ text: string; category: "package-workflow" | "project-specific" | "needs-judgment" }>;
 };
 
 function normalizeHomePath(value: string): string {
@@ -101,6 +108,48 @@ function looksLikeCorrection(value: string): boolean {
   return ["don't", "do not", "instead", "not ", "no,", "why", "should", "i want", "we need", "you need", "can you", "that wasn't", "overreaching"].some((term) => lower.includes(term));
 }
 
+const PACKAGE_WORKFLOW_TERMS = [
+  "package", "skill", "prompt", "workflow", "guidance", "agent", "subagent", "analysis", "session",
+  "codecks", "plastic", "unity docs", "unity cli", "batchmode", "lockfile", "artifact", "docs", "documentation",
+  "search", "rg", "python", "utf-8", "unicode", "estimate",
+];
+
+const PROJECT_SPECIFIC_TERMS = [
+  "ship", "mission", "chapter", "chart group", "sequence", "job-", "case-", "ss ", "location", "macro chart",
+  "yarn node", "flashlight", "telegram", "shomesh", "paris", "ile de france", "champlain", "hoffnung",
+];
+
+function classifyCorrection(value: string): "package-workflow" | "project-specific" | "needs-judgment" {
+  const lower = value.toLowerCase();
+  const packageHits = PACKAGE_WORKFLOW_TERMS.filter((term) => lower.includes(term)).length;
+  const projectHits = PROJECT_SPECIFIC_TERMS.filter((term) => lower.includes(term)).length;
+  if (packageHits > 0 && packageHits >= projectHits) return "package-workflow";
+  if (projectHits > 0 && packageHits === 0) return "project-specific";
+  return "needs-judgment";
+}
+
+function shouldKeepCategory(category: "package-workflow" | "project-specific" | "needs-judgment", mode: SessionAnalysisParams["filterMode"]): boolean {
+  if (!mode || mode === "all") return true;
+  if (mode === "package-workflow") return category === "package-workflow" || category === "needs-judgment";
+  return category === "project-specific";
+}
+
+function failureSignature(tool: string, output: string): string {
+  const lower = output.toLowerCase();
+  if (tool.startsWith("codecks") && lower.includes("milestone") && lower.includes("api error")) return "codecks-milestone-api-error";
+  if (tool.includes("resolvable") && lower.includes("no resolvables matched")) return "codecks-empty-resolvables";
+  if (lower.includes("field 'milestoneid'") || lower.includes('field "milestoneid"')) return "codecks-milestoneid-type";
+  if (tool === "unity_launch_batchmode" && lower.includes("refusing to launch unity") && lower.includes("lockfile")) return "unity-lockfile-refusal";
+  if (tool === "unity_launch_batchmode" && lower.includes("unity") && lower.includes("test results") && lower.includes("failed tests")) return "unity-test-failure";
+  if (lower.includes("unicodeencodeerror") || lower.includes("charmap")) return "python-windows-unicode-output";
+  if (lower.includes("modulenotfounderror")) return "python-missing-module";
+  if (lower.includes("os error 123") || lower.includes("filename, directory name")) return "windows-path-glob-error";
+  if (lower.includes("validation failed for tool")) return "tool-argument-validation";
+  if (lower.includes("npm error enoent") || lower.includes("could not read package.json")) return "npm-wrong-working-directory";
+  if (lower.includes("command exited with code 1") && output.trim().startsWith("(no output)")) return "silent-command-failure";
+  return `${namespaceForTool(tool)}:${tool}`;
+}
+
 async function walkJsonlFiles(root: string): Promise<string[]> {
   const results: string[] = [];
   async function visit(dir: string): Promise<void> {
@@ -124,6 +173,38 @@ function fileId(file: string): string {
   return basename(file, ".jsonl").split("_").pop() ?? basename(file, ".jsonl");
 }
 
+function parseDateBoundary(value: string | undefined, endOfDay = false): number | undefined {
+  if (!value?.trim()) return undefined;
+  const trimmed = value.trim();
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+    ? `${trimmed}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}`
+    : trimmed;
+  const parsed = Date.parse(iso);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function fileTimestampMs(file: string): number {
+  const prefix = basename(file).slice(0, 24).replace(/T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z/, "T$1:$2:$3.$4Z");
+  const parsed = Date.parse(prefix);
+  return Number.isFinite(parsed) ? parsed : statSync(file).mtimeMs;
+}
+
+function applySessionFileFilters(files: string[], params: SessionAnalysisParams): string[] {
+  const include = new Set((params.includeSessionIds ?? []).map((id) => id.trim()).filter(Boolean));
+  const exclude = new Set((params.excludeSessionIds ?? []).map((id) => id.trim()).filter(Boolean));
+  const since = parseDateBoundary(params.since, false);
+  const until = parseDateBoundary(params.until, true);
+  return files.filter((file) => {
+    const id = fileId(file);
+    const timestamp = fileTimestampMs(file);
+    if (include.size > 0 && !include.has(id) && ![...include].some((needle) => basename(file).includes(needle))) return false;
+    if (exclude.has(id) || [...exclude].some((needle) => basename(file).includes(needle))) return false;
+    if (since !== undefined && timestamp < since) return false;
+    if (until !== undefined && timestamp > until) return false;
+    return true;
+  });
+}
+
 async function resolveSessionFiles(params: SessionAnalysisParams, cwd: string): Promise<string[]> {
   const raw = params.session?.trim() || "current";
   if (raw === "current") {
@@ -133,8 +214,8 @@ async function resolveSessionFiles(params: SessionAnalysisParams, cwd: string): 
   const candidate = normalizeHomePath(raw);
   if ((isAbsolute(candidate) || candidate.includes("/") || candidate.includes("\\")) && existsSync(resolve(cwd, candidate))) {
     const absolute = isAbsolute(candidate) ? candidate : resolve(cwd, candidate);
-    if (statSync(absolute).isDirectory()) return (await walkJsonlFiles(absolute)).sort();
-    return [absolute];
+    if (statSync(absolute).isDirectory()) return applySessionFileFilters((await walkJsonlFiles(absolute)).sort(), params);
+    return applySessionFileFilters([absolute], params);
   }
 
   const root = params.projectFolder
@@ -146,15 +227,17 @@ async function resolveSessionFiles(params: SessionAnalysisParams, cwd: string): 
   const cutoff = now - days * 24 * 60 * 60 * 1000;
 
   if (["all", "sessions", "*"] .includes(raw.toLowerCase())) {
-    return allFiles
-      .filter((file) => statSync(file).mtimeMs >= cutoff)
-      .sort();
+    return applySessionFileFilters(
+      allFiles.filter((file) => statSync(file).mtimeMs >= cutoff).sort(),
+      params,
+    );
   }
 
   const matches = allFiles.filter((file) => basename(file).includes(raw));
-  if (matches.length === 0) throw new Error(`No session JSONL matched '${raw}' under ${root}.`);
-  if (matches.length > 1) throw new Error(`Multiple session JSONL files matched '${raw}'. Be more specific:\n${matches.slice(0, 20).map((file) => `- ${file}`).join("\n")}`);
-  return matches;
+  const filteredMatches = applySessionFileFilters(matches, params);
+  if (filteredMatches.length === 0) throw new Error(`No session JSONL matched '${raw}' under ${root}.`);
+  if (filteredMatches.length > 1) throw new Error(`Multiple session JSONL files matched '${raw}'. Be more specific:\n${filteredMatches.slice(0, 20).map((file) => `- ${file}`).join("\n")}`);
+  return filteredMatches;
 }
 
 async function analyzeSessionFile(file: string, params: SessionAnalysisParams): Promise<SessionSummary> {
@@ -198,7 +281,10 @@ async function analyzeSessionFile(file: string, params: SessionAnalysisParams): 
       const heading = firstLine(userText);
       if (heading?.startsWith("# ")) increment(summary.prompts, heading);
       if (summary.userMessages > 1 && looksLikeCorrection(userText) && summary.userCorrections.length < maxCorrections) {
-        summary.userCorrections.push(snippet(userText, 500));
+        const category = classifyCorrection(userText);
+        if (shouldKeepCategory(category, params.filterMode)) {
+          summary.userCorrections.push({ text: snippet(userText, 500), category });
+        }
       }
     }
 
@@ -221,7 +307,9 @@ async function analyzeSessionFile(file: string, params: SessionAnalysisParams): 
       const output = textFromContent(message);
       if (toolName && isFailureText(output)) {
         summary.failures += 1;
-        if (summary.notableFailures.length < maxFailures) summary.notableFailures.push({ tool: toolName, snippet: snippet(output, 500) });
+        if (summary.notableFailures.length < maxFailures) {
+          summary.notableFailures.push({ tool: toolName, snippet: snippet(output, 500), signature: failureSignature(toolName, output) });
+        }
       }
     }
   }
@@ -233,23 +321,72 @@ function topEntries(counter: Record<string, number>, limit = 12): Array<[string,
   return Object.entries(counter).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit);
 }
 
+type TriageItem = {
+  theme: string;
+  packageName: string;
+  status: "new_candidate" | "likely_already_fixed" | "needs_human_judgment";
+  evidence: number;
+  rationale: string;
+};
+
+function themeIsKnown(theme: string, params: SessionAnalysisParams): boolean {
+  const haystack = [params.knownFixed, ...(params.excludeThemes ?? [])].filter(Boolean).join("\n").toLowerCase();
+  if (!haystack) return false;
+  return theme.toLowerCase().split(/[-_\s]+/).some((part) => part.length > 3 && haystack.includes(part));
+}
+
+function buildTriageItems(summaries: SessionSummary[], params: SessionAnalysisParams): TriageItem[] {
+  const signatures: Record<string, number> = {};
+  const corrections = summaries.flatMap((session) => session.userCorrections);
+  for (const session of summaries) {
+    for (const failure of session.notableFailures) increment(signatures, failure.signature);
+  }
+
+  const items: TriageItem[] = [];
+  const push = (theme: string, packageName: string, evidence: number, rationale: string, status: TriageItem["status"] = "new_candidate") => {
+    if (evidence <= 0) return;
+    items.push({ theme, packageName, evidence, rationale, status: themeIsKnown(theme, params) ? "likely_already_fixed" : status });
+  };
+
+  push("Codecks milestone lookup/context", "pi-codecks", signatures["codecks-milestone-api-error"] ?? 0, "Raw milestone queries failed; prefer or add first-class milestone helpers.");
+  push("Codecks empty resolvables", "pi-codecks", signatures["codecks-empty-resolvables"] ?? 0, "Empty thread lists should be successful empty results, not errors.");
+  push("Unity project lockfile handling", "pi-unity", signatures["unity-lockfile-refusal"] ?? 0, "Repeated lockfile refusals indicate project-status/artifact guidance or tooling may help.");
+  push("Windows shell/Python command safety", "pi-compound-game-dev / pi-extras", (signatures["python-windows-unicode-output"] ?? 0) + (signatures["windows-path-glob-error"] ?? 0), "Windows Unicode output and glob/path failures are high-level command ergonomics issues.");
+  push("NPM/package working-directory guardrails", "pi-extras", signatures["npm-wrong-working-directory"] ?? 0, "Package commands run from a coordination root can fail when no package.json exists.", "needs_human_judgment");
+
+  const correctionText = corrections.map((correction) => correction.text.toLowerCase()).join("\n");
+  push("Authored-content design-time validation", "pi-compound-game-dev", /design[ -]?time|edit[ -]?time|before.*play|validation error/.test(correctionText) ? 1 : 0, "Corrections ask for deterministic authored-data errors before runtime/playthrough discovery.");
+  push("Mutable designer-data test stability", "pi-compound-game-dev", /magic numbers|designer-authored|changeable data/.test(correctionText) ? 1 : 0, "Corrections distinguish stable contracts from mutable designer-authored values.");
+  push("Direct plan framing", "pi-compound-game-dev", /plan is the plan|not some other plan/.test(correctionText) ? 1 : 0, "Corrections ask plans to describe target design directly rather than comparing to old plans.");
+  push("Subagent running display/stats", "pi-subagents", /subagent.*stats|agents are running|performance of the agents/.test(correctionText) ? 1 : 0, "Corrections ask for better per-agent visibility/debugging.");
+
+  return items.sort((a, b) => b.evidence - a.evidence || a.status.localeCompare(b.status) || a.theme.localeCompare(b.theme));
+}
+
 function formatSessionAnalysis(summaries: SessionSummary[], params: SessionAnalysisParams): string {
   const aggregateTools: Record<string, number> = {};
   const aggregateNamespaces: Record<string, number> = {};
   const aggregateSkills: Record<string, number> = {};
   const aggregateRefs: Record<string, number> = {};
+  const failureSignatures: Record<string, number> = {};
+  const correctionCategories: Record<string, number> = {};
   for (const session of summaries) {
     for (const [key, value] of Object.entries(session.tools)) increment(aggregateTools, key, value);
     for (const [key, value] of Object.entries(session.namespaces)) increment(aggregateNamespaces, key, value);
     for (const [key, value] of Object.entries(session.skills)) increment(aggregateSkills, key, value);
     for (const [key, value] of Object.entries(session.references)) increment(aggregateRefs, key, value);
+    for (const failure of session.notableFailures) increment(failureSignatures, failure.signature);
+    for (const correction of session.userCorrections) increment(correctionCategories, correction.category);
   }
+  const triageItems = buildTriageItems(summaries, params);
 
   const lines = [
     "# Pi Session Package Utilization Analysis",
     "",
     `Session files: ${summaries.length}`,
     params.focus ? `Focus: ${params.focus}` : undefined,
+    params.filterMode ? `Filter mode: ${params.filterMode}` : undefined,
+    params.since || params.until ? `Date filter: ${params.since ?? "(start)"} to ${params.until ?? "(end)"}` : undefined,
     "",
     "## Sessions",
     ...summaries.map((session) => `- ${session.id} — ${session.toolCalls} tool calls, ${session.failures} failure signals, ${session.userMessages} user messages — ${session.firstUserMessage ?? "(no user text)"}`),
@@ -266,11 +403,20 @@ function formatSessionAnalysis(summaries: SessionSummary[], params: SessionAnaly
     "## Package references used",
     ...topEntries(aggregateRefs, 30).map(([key, value]) => `- ${value}× ${key}`),
     "",
+    "## Failure signatures",
+    ...topEntries(failureSignatures, 20).map(([key, value]) => `- ${key}: ${value}`),
+    "",
     "## Notable failures/friction samples",
-    ...summaries.flatMap((session) => session.notableFailures.slice(0, 3).map((failure) => `- ${session.id} ${failure.tool}: ${failure.snippet}`)).slice(0, 40),
+    ...summaries.flatMap((session) => session.notableFailures.slice(0, 3).map((failure) => `- ${session.id} ${failure.tool} [${failure.signature}]: ${failure.snippet}`)).slice(0, 40),
+    "",
+    "## User correction categories",
+    ...topEntries(correctionCategories, 10).map(([key, value]) => `- ${key}: ${value}`),
     "",
     "## User correction samples",
-    ...summaries.flatMap((session) => session.userCorrections.slice(0, 3).map((correction) => `- ${session.id}: ${correction}`)).slice(0, 40),
+    ...summaries.flatMap((session) => session.userCorrections.slice(0, 3).map((correction) => `- ${session.id} [${correction.category}]: ${correction.text}`)).slice(0, 40),
+    "",
+    "## Candidate package/workflow themes",
+    ...triageItems.slice(0, 20).map((item) => `- ${item.status}: ${item.packageName} — ${item.theme} (${item.evidence} signal${item.evidence === 1 ? "" : "s"}). ${item.rationale}`),
     "",
     "## Improvement prompts",
     "- Prioritize repeated existing-package friction before proposing new packages.",
@@ -295,8 +441,15 @@ export default function piExtras(pi: ExtensionAPI) {
     parameters: Type.Object({
       session: Type.Optional(Type.String({ description: "Session id, JSONL path, directory, or 'all'/'sessions' for an aggregate scan. Defaults are not inferred; pass explicitly." })),
       days: Type.Optional(Type.Integer({ minimum: 1, maximum: 365, default: 7, description: "For aggregate scans, include files modified within this many days." })),
+      since: Type.Optional(Type.String({ description: "Optional inclusive start date/time filter, e.g. 2026-06-01." })),
+      until: Type.Optional(Type.String({ description: "Optional inclusive end date/time filter, e.g. 2026-06-30." })),
       focus: Type.Optional(Type.String({ description: "Optional focus text for the review." })),
       projectFolder: Type.Optional(Type.String({ description: "Session root/folder to scan. Defaults to ~/.pi/agent/sessions." })),
+      includeSessionIds: Type.Optional(Type.Array(Type.String(), { description: "Only include matching session IDs when scanning a directory or aggregate scope." })),
+      excludeSessionIds: Type.Optional(Type.Array(Type.String(), { description: "Exclude matching session IDs when scanning a directory or aggregate scope." })),
+      filterMode: Type.Optional(Type.Union([Type.Literal("all"), Type.Literal("package-workflow"), Type.Literal("project-specific")], { description: "Heuristic correction filtering. Defaults to all." })),
+      knownFixed: Type.Optional(Type.String({ description: "Optional free-text list of themes already fixed; matching candidates are tagged likely_already_fixed." })),
+      excludeThemes: Type.Optional(Type.Array(Type.String(), { description: "Theme keywords already fixed or intentionally ignored." })),
       limitFailures: Type.Optional(Type.Integer({ minimum: 0, maximum: 100, default: 20 })),
       limitCorrections: Type.Optional(Type.Integer({ minimum: 0, maximum: 100, default: 20 })),
     }),

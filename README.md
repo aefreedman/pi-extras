@@ -34,7 +34,7 @@ pi install -l <path-to-pi-extras>
 
 This package is intentionally small. Utility prompts, lightweight tools, and maintenance skills can live here when they do not justify a dedicated package.
 
-`pi_analyze_session` accepts a session id/path, a directory, or `session="all"` with `projectFolder` and `days` for aggregate reviews.
+`pi_analyze_session` accepts a session id/path, a directory, or `session="all"` with `projectFolder` and `days` for aggregate reviews. It also supports `since`/`until`, `includeSessionIds`/`excludeSessionIds`, `filterMode` (`all`, `package-workflow`, or `project-specific`), `knownFixed`, and `excludeThemes` to reduce already-fixed or project-specific noise during package-improvement reviews.
 
 ## License
 

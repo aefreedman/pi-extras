@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows semantic versioning for public package releases.
 
+## [0.3.3] - 2026-06-28
+
+### Changed
+
+- Tuned `pi_analyze_session` correction classification so ambiguous words such as tool, validation, and plan do not by themselves mark a correction as package-workflow.
+
+## [0.3.2] - 2026-06-28
+
+### Changed
+
+- Improved `pi_analyze_session` triage with date/session include-exclude filters, heuristic package-workflow/project-specific correction filtering, failure signature grouping, and candidate theme status labels.
+
 ## [0.3.1] - 2026-06-27
 
 ### Changed
