@@ -9,7 +9,9 @@ const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8")) as {
   repository?: { url?: string };
   bugs?: { url?: string };
   homepage?: string;
-  pi?: { prompts?: string[]; skills?: string[] };
+  pi?: { extensions?: string[]; prompts?: string[]; skills?: string[] };
+  dependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
 };
 
 assert.equal(pkg.name, "@aefree/pi-extras");
@@ -18,12 +20,29 @@ assert.equal(pkg.license, "MIT");
 assert.equal(pkg.repository?.url, "git+ssh://git@github.com/aefreedman/pi-extras.git");
 assert(pkg.bugs?.url?.includes("aefreedman/pi-extras"), "Expected pi-extras bugs URL.");
 assert(pkg.homepage?.includes("aefreedman/pi-extras"), "Expected pi-extras homepage URL.");
+assert(pkg.pi?.extensions?.includes("./index.ts"), "Expected extension registration.");
 assert(pkg.pi?.prompts?.includes("./prompts"), "Expected prompts directory registration.");
 assert(pkg.pi?.skills?.includes("./skills"), "Expected skills directory registration.");
 assert(existsSync(new URL("LICENSE", root)), "Expected LICENSE file.");
 assert(existsSync(new URL("README.md", root)), "Expected README file.");
+assert(pkg.dependencies?.typebox, "Expected runtime typebox dependency for extension schemas.");
+assert(pkg.peerDependencies?.["@mariozechner/pi-coding-agent"] === "*", "Expected Pi coding-agent peer dependency.");
+const extensionText = readFileSync(new URL("index.ts", root), "utf8");
+assert(extensionText.includes("pi_analyze_session"), "Expected session analysis tool registration.");
+assert(extensionText.includes("namespaceForTool"), "Expected tool namespace grouping.");
+assert(extensionText.includes("Session files:"), "Expected aggregate session output.");
 assert(existsSync(new URL("prompts/continue.md", root)), "Expected /continue prompt.");
+assert(existsSync(new URL("prompts/analyze-session.md", root)), "Expected /analyze-session prompt.");
+assert(existsSync(new URL("prompts/closeout-card.md", root)), "Expected /closeout-card prompt.");
 assert(existsSync(new URL("skills/streamlining-skills/SKILL.md", root)), "Expected streamlining-skills skill.");
+
+const analyzeSessionText = readFileSync(new URL("prompts/analyze-session.md", root), "utf8");
+assert(analyzeSessionText.includes("tool-call counts"), "Expected analyze-session prompt to collect tool-call counts.");
+assert(analyzeSessionText.includes("improving existing packages"), "Expected analyze-session prompt to prioritize existing-package improvements.");
+
+const closeoutCardText = readFileSync(new URL("prompts/closeout-card.md", root), "utf8");
+assert(closeoutCardText.includes("codecks_card_list_resolvables"), "Expected closeout-card prompt to avoid duplicate review threads.");
+assert(closeoutCardText.includes("plastic_mergeToBranch"), "Expected closeout-card prompt to prefer Plastic merge helper.");
 
 const skillText = readFileSync(new URL("skills/streamlining-skills/SKILL.md", root), "utf8");
 assert(skillText.includes("name: streamlining-skills"), "Expected skill frontmatter name.");
